@@ -11,7 +11,7 @@ Load the shared library at `path` and return a `CLib`. When `global` is true, re
 - `ffi.cnew(ctype [, initializer])`
 Allocate a `CData` value of the given C type. An optional list initializes an array; an optional map initializes record fields. Without an initializer, storage is zero-initialized.
 
--`ffi.cast(ctype, value)`
+- `ffi.cast(ctype, value)`
 Convert `value` to the given C type and return it as `CData`. For function-pointer types, a Teascript callable can be wrapped as a C callback.
 
 - `ffi.typeof(value)`
