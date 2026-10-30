@@ -13,6 +13,19 @@
 #include "ctype.h"
 #include "cparse.h"
 
+/* Check string against a linear list of matches */
+int cparse_case(const char* str, size_t len, const char* match)
+{
+    size_t len1;
+    int n;
+    for(n = 0; (len1 = (int)*match++); n++, match += len1)
+    {
+        if(len == len1 && !memcmp(match, str, len1))
+        return n;
+    }
+    return -1;
+}
+
 static void cparse_expected_error(tea_State* T, int tok, const char* s)
 {
     if(tok)
@@ -98,6 +111,69 @@ static int cparse_array(tea_State* T, int tok, bool* flexible, int* size)
 }
 
 static int cparse_basetype(tea_State* T, int tok, CType* ct);
+static int cparse_record(tea_State* T, CType* ct, bool is_union);
+static int cparse_array(tea_State* T, int tok, bool* flexible, int* size);
+static void check_void_forbidden(tea_State* T, CType* ct, int tok);
+
+/* Parse the argument list of a function declarator.
+** The opening '(' has already been consumed.
+** Function types are represented by CTYPE_FUNC;
+** libffi uses the same representation for a callable pointer. */
+static int cparse_func_args(tea_State* T, int tok, CFunc** out)
+{
+    CType args[MAX_FUNC_ARGS] = {0};
+    int narg = 0;
+    bool va = false;
+    int i;
+
+    while(cparse_check_tok(T, tok) != ')')
+    {
+        bool flexible = true;
+        int array_size;
+
+        if(cparse_check_tok(T, tok) == TOK_VAL)
+        {
+            tok = yylex();
+            if(cparse_check_tok(T, tok) != ')')
+                cparse_expected_error(T, tok, ")");
+            va = true;
+            break;
+        }
+
+        if(narg >= MAX_FUNC_ARGS)
+            tea_error(T, "%d:too many function arguments", yyget_lineno());
+
+        if(cparse_check_tok(T, tok) == TOK_STRUCT ||
+           cparse_check_tok(T, tok) == TOK_UNION)
+            tok = cparse_record(T, &args[narg], cparse_check_tok(T, tok) == TOK_UNION);
+        else
+            tok = cparse_basetype(T, tok, &args[narg]);
+
+        tok = cparse_pointer(T, tok, &args[narg]);
+        if(cparse_check_tok(T, tok) != ')')
+            check_void_forbidden(T, &args[narg], tok);
+
+        if(cparse_check_tok(T, tok) == TOK_NAME)
+            tok = yylex();
+        tok = cparse_array(T, tok, &flexible, &array_size);
+        if(flexible || array_size >= 0)
+            ctype_to_ptr(T, &args[narg]);
+        narg++;
+
+        if(cparse_check_tok(T, tok) == ')')
+            break;
+        if(cparse_check_tok(T, tok) != ',')
+            cparse_expected_error(T, tok, ",");
+        tok = yylex();
+    }
+
+    *out = calloc(1, sizeof(CFunc) + sizeof(CType*) * narg);
+    (*out)->narg = narg;
+    (*out)->va = va;
+    for(i = 0; i < narg; i++)
+        (*out)->args[i] = ctype_lookup(T, &args[i], false);
+    return yylex();
+}
 
 static void init_ft_struct(tea_State* T, ffi_type* ft, ffi_type** elements, size_t* offsets)
 {
@@ -130,8 +206,6 @@ static void check_void_forbidden(tea_State* T, CType* ct, int tok)
     else
         tea_error(T, "%d:void type in forbidden context", yyget_lineno());
 }
-
-static int cparse_record(tea_State* T, CType* ct, bool is_union);
 
 static int cparse_record_field(tea_State* T, CRecordField** fields)
 {
@@ -691,6 +765,54 @@ void cparse_decl(tea_State* T, const char* p, size_t len)
         if(tdef)
         {
             const char* name;
+
+            /* A callback typedef has the declarator form
+             *   typedef R (*Name)(args);
+             * Keep it as a function type, which is what ffi.cast and the
+             * existing libffi call path expect. */
+            if(cparse_check_tok(T, tok) == '(')
+            {
+                CFunc* func;
+                CType ftype = {0};
+                char namebuf[256];
+                size_t namelen;
+
+                tok = yylex();
+                if(cparse_check_tok(T, tok) != '*')
+                    cparse_expected_error(T, tok, "*");
+                tok = yylex();
+                if(cparse_check_tok(T, tok) != TOK_NAME)
+                    cparse_expected_error(T, tok, "identifier");
+                namelen = yyget_leng();
+                if(namelen >= sizeof(namebuf))
+                    tea_error(T, "%d:typedef name is too long", yyget_lineno());
+                memcpy(namebuf, yyget_text(), namelen);
+                namebuf[namelen] = '\0';
+                name = namebuf;
+                tok = yylex();
+                if(cparse_check_tok(T, tok) != ')')
+                    cparse_expected_error(T, tok, ")");
+                tok = yylex();
+                if(cparse_check_tok(T, tok) != '(')
+                    cparse_expected_error(T, tok, "(");
+
+                tok = cparse_func_args(T, yylex(), &func);
+                func->rtype = ctype_lookup(T, &ct, false);
+                ftype.type = CTYPE_FUNC;
+                ftype.func = func;
+                ct = ftype;
+
+                tea_get_fieldp(T, TEA_REGISTRY_INDEX, &ctdef_registry);
+                if(tea_get_key(T, -1, name))
+                    tea_error(T, "%d:redefinition of symbol '%s'", yyget_lineno(), name);
+                ctype_lookup(T, &ct, true);
+                tea_set_key(T, -2, name);
+                tea_pop(T, 1);
+
+                if(cparse_check_tok(T, tok) != ';')
+                    cparse_expected_error(T, tok, ";");
+                continue;
+            }
 
             tok = cparse_pointer(T, tok, &ct);
 

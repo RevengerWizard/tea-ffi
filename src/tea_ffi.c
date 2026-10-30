@@ -20,6 +20,7 @@
 #include "cdata.h"
 #include "cparse.h"
 #include "cconv.h"
+#include "ccallback.h"
 
 const char* crecord_registry;
 const char* carray_registry;
@@ -46,7 +47,7 @@ ffi_type* ffi_get_type(size_t size, bool s)
 static void __cdata_tostring(tea_State* T, CData* cd)
 {
     void* ptr = (cdata_type(cd) == CTYPE_PTR) ? cdata_ptr_ptr(cd) : cdata_ptr(cd);
-    
+
     teaB_buffer b;
     teaB_buffinit(T, &b);
     teaB_addstring(&b, "cdata<");
@@ -500,6 +501,8 @@ static void ffi_cdata_gc(tea_State* T)
 {
     CData* cd = tea_check_udata(T, 0, CDATA_MT);
 
+    ccallback_free(cd);
+
     tea_get_udvalue(T, 0, 0);
     if(!tea_is_nil(T, -1))
     {
@@ -573,7 +576,7 @@ static void ffi_clib_getattr(tea_State* T)
     tea_get_fieldp(T, TEA_REGISTRY_INDEX, &cfunc_registry);
     if(!tea_get_key(T, -1, name))
         tea_error(T, "missing declaration for function '%s'", name);
-    
+
     match.func = (CFunc*)tea_to_pointer(T, -1);
     tea_pop(T, 2);
     ct = ctype_lookup(T, &match, false);
@@ -602,7 +605,7 @@ static void ffi_clib_gc(tea_State* T)
 
     tea_push_pointer(T, cl);
     tea_delete_field(T, TEA_REGISTRY_INDEX);
-    
+
     tea_push_nil(T);
 }
 
@@ -652,6 +655,9 @@ static void ffi_cast(tea_State* T)
 {
     CType* ct = cparse_single(T, NULL, false);
     CData* cd = cdata_new(T, ct, NULL);
+
+    if(ccallback_new(T, ct, cd, 1))
+        return;
     cconv_cdata_tea(T, ct, cdata_ptr(cd), 1, true);
 }
 
@@ -845,19 +851,6 @@ static void ffi_errno(tea_State* T)
     tea_push_integer(T, cur);
 }
 
-/* Check string against a linear list of matches */
-int cparse_case(const char* str, size_t len, const char* match)
-{
-    size_t len1;
-    int n;
-    for(n = 0; (len1 = (int)*match++); n++, match += len1)
-    {
-        if(len == len1 && !memcmp(match, str, len1))
-        return n;
-    }
-    return -1;
-}
-
 static void ffi__abi(tea_State* T)
 {
     size_t len;
@@ -878,24 +871,24 @@ static void ffi__abi(tea_State* T)
 }
 
 static const tea_Reg funcs[] = {
-    { "cdef", ffi_cdef, 1, 0 },
-    { "load", ffi_load, 1, 1 },
-    { "cnew", ffi_cnew, 1, 2 },
-    { "cast", ffi_cast, 2, 0 },
-    { "typeof", ffi_typeof, 1, 1 },
-    { "addressof", ffi_addressof, 1, 0 },
-    { "gc", ffi_gc, 2, 0 },
-    { "sizeof", ffi_sizeof, 1, 0 },
-    { "offsetof", ffi_offsetof, 2, 0 },
-    { "alignof", ffi_alignof, 1, 0 },
-    { "istype", ffi_istype, 2, 0 },
-    { "tonumber", ffi_tonumber, 1, 0 },
-    { "string", ffi_string, 1, 1 },
-    { "copy", ffi_copy, 2, 1 },
-    { "fill", ffi_fill, 2, 1 },
-    { "errno", ffi_errno, 0, 1 },
-    { "abi", ffi__abi, 1, 0 },
-    { NULL, NULL }
+    {"cdef", ffi_cdef, 1, 0},
+    {"load", ffi_load, 1, 1},
+    {"cnew", ffi_cnew, 1, 2},
+    {"cast", ffi_cast, 2, 0},
+    {"typeof", ffi_typeof, 1, 1},
+    {"addressof", ffi_addressof, 1, 0},
+    {"gc", ffi_gc, 2, 0},
+    {"sizeof", ffi_sizeof, 1, 0},
+    {"offsetof", ffi_offsetof, 2, 0},
+    {"alignof", ffi_alignof, 1, 0},
+    {"istype", ffi_istype, 2, 0},
+    {"tonumber", ffi_tonumber, 1, 0},
+    {"string", ffi_string, 1, 1},
+    {"copy", ffi_copy, 2, 1},
+    {"fill", ffi_fill, 2, 1},
+    {"errno", ffi_errno, 0, 1},
+    {"abi", ffi__abi, 1, 0},
+    {NULL, NULL}
 };
 
 TEAMOD_API void tea_import_ffi(tea_State* T)

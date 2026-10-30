@@ -14,6 +14,7 @@ CData* cdata_new(tea_State* T, CType* ct, void* ptr)
     CData* cd = tea_new_udatav(T, sizeof(CData) + (ptr ? 0 : ctype_sizeof(ct)), 1, CDATA_MT);
     cd->ptr = ptr;
     cd->ct = ct;
+    cd->closure = NULL;
 
     tea_new_map(T);
     tea_set_fieldp(T, TEA_REGISTRY_INDEX, cd);

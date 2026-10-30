@@ -95,6 +95,7 @@ typedef struct CData
 {
     struct CType* ct;
     void* ptr;
+    void* closure;
 } CData;
 
 CArray* carray_lookup(tea_State* T, size_t size, CType* ct);

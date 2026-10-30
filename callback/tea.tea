@@ -1,0 +1,25 @@
+import ffi
+
+ffi.cdef(```
+typedef void (*CallbackFunc)(int value);
+void register_callback(CallbackFunc callback);
+void trigger_callback(int value);
+```)
+
+const lib = ffi.load("callback")
+
+function callback(value)
+{
+    print("Teascript: Received value %d in callback".format(value))
+}
+
+const cb = ffi.cast("CallbackFunc", callback)
+print(typeof(cb), cb)
+
+lib.register_callback(cb)
+
+print("Teascript: Triggering callback...")
+lib.trigger_callback(42)
+
+// Important: Keep the callback object alive while it's needed
+// When cb is garbage collected, the callback becomes invalid

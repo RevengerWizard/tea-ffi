@@ -1,4 +1,4 @@
-# tea_ffi
+# tea-ffi
 
 [LuaJIT]: https://luajit.org/
 [Teascript]: https://github.com/RevengerWizard/teascript
@@ -7,7 +7,7 @@
 [cffi-lua]: https://github.com/q66/cffi-lua
 [lua-ffi]: https://github.com/zhaojh329/lua-ffi
 
-tea_ffi is a portable C FFI for [Teascript] based on [libffi] and an API design similar to that of [LuaJIT], but written using the Teascript C API.
+tea-ffi is a portable C FFI for [Teascript] based on [libffi] and an API design similar to that of [LuaJIT], but written using the Teascript C API.
 
 It aims to be the standard FFI module interface to C for Teascript implementations.
 

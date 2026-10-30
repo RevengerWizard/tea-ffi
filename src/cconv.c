@@ -141,6 +141,13 @@ static bool cconv_udata_cdata(tea_State* T, CType* ct, void* ptr, int idx, bool 
             return true;
         }
         break;
+    case CTYPE_FUNC:
+        /* Function cdata is already a native function pointer. */
+        if(ct->type == CTYPE_FUNC || ct->type == CTYPE_PTR) {
+            *(void**)ptr = cdata_ptr_ptr(cd);
+            return true;
+        }
+        break;
     default:
         if(ctype_is_num(cd->ct))
         {
@@ -191,7 +198,6 @@ void cconv_cdata_tea(tea_State* T, CType* ct, void* ptr, int idx, bool cast)
 {
     switch(ct->type)
     {
-    case CTYPE_FUNC:
     case CTYPE_VOID:
         tea_error(T, "invalid C type");
         break;

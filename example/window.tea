@@ -1,0 +1,116 @@
+import os, ffi
+
+assert(os.name == "windows")
+
+// A deliberately small Win32 window example.
+// The standard WS_OVERLAPPEDWINDOW style supplies the minimize,
+// maximize and close buttons, while the callback handles clean shutdown and default messages.
+ffi.cdef(```
+typedef void* HANDLE;
+typedef HANDLE HWND;
+typedef HANDLE HBRUSH;
+typedef const char* LPCSTR;
+typedef unsigned int UINT;
+typedef unsigned long DWORD;
+typedef size_t WPARAM;
+typedef size_t LPARAM;
+typedef int BOOL;
+typedef size_t LRESULT;
+typedef LRESULT (*WNDPROC)(HWND window, UINT message, size_t wParam, size_t lParam);
+
+typedef struct {
+    UINT style;
+    WNDPROC wndProc;
+    int cbClsExtra;
+    int cbWndExtra;
+    HANDLE hInstance;
+    HANDLE hIcon;
+    HANDLE hCursor;
+    HBRUSH hbrBackground;
+    LPCSTR lpszMenuName;
+    LPCSTR lpszClassName;
+} WNDCLASSA;
+
+typedef struct {
+    HWND hwnd;
+    UINT message;
+    WPARAM wParam;
+    LPARAM lParam;
+    DWORD time;
+    int pt_x;
+    int pt_y;
+} MSG;
+
+HWND CreateWindowExA(
+    DWORD exStyle, LPCSTR className, LPCSTR windowName, DWORD style,
+    int x, int y, int width, int height, HWND parent, HANDLE menu,
+    HANDLE instance, void* param
+);
+unsigned short RegisterClassA(WNDCLASSA* windowClass);
+LRESULT DefWindowProcA(HWND window, UINT message, size_t wParam, size_t lParam);
+void PostQuitMessage(int exitCode);
+int ShowWindow(HWND window, int command);
+BOOL UpdateWindow(HWND window);
+HBRUSH CreateSolidBrush(DWORD color);
+BOOL GetMessageA(MSG* message, HWND window, UINT min, UINT max);
+BOOL TranslateMessage(MSG* message);
+size_t DispatchMessageA(MSG* message);
+```)
+
+const user32 = ffi.load("user32")
+const gdi32 = ffi.load("gdi32")
+
+const WS_OVERLAPPED = 0x00000000
+const WS_CAPTION = 0x00C00000
+const WS_SYSMENU = 0x00080000
+const WS_THICKFRAME = 0x00040000
+const WS_MINIMIZEBOX = 0x00020000
+const WS_MAXIMIZEBOX = 0x00010000
+const WS_OVERLAPPEDWINDOW = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU |
+    WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
+const SW_SHOW = 5
+const WM_DESTROY = 2
+const CS_HREDRAW = 2
+const CS_VREDRAW = 1
+
+function window_proc(window, message, wParam, lParam)
+{
+    if message == WM_DESTROY
+    {
+        user32.PostQuitMessage(0)
+        return 0
+    }
+    return user32.DefWindowProcA(window, message, wParam, lParam)
+}
+
+const wndproc = ffi.cast("WNDPROC", window_proc)
+const class_name = "TeascriptWindow"
+const black = gdi32.CreateSolidBrush(0)
+const window_class = ffi.cnew("WNDCLASSA", {
+    style = CS_HREDRAW | CS_VREDRAW,
+    wndProc = wndproc,
+    hbrBackground = black,
+    lpszClassName = class_name
+})
+assert(user32.RegisterClassA(window_class) != 0)
+
+const window = user32.CreateWindowExA(
+    0,
+    class_name,
+    "Teascript Win32 window",
+    WS_OVERLAPPEDWINDOW,
+    100, 100, 640, 420,
+    nil, nil, nil, nil
+)
+
+assert(window != nil)
+
+user32.ShowWindow(window, SW_SHOW)
+user32.UpdateWindow(window)
+
+const message = ffi.cnew("MSG")
+while user32.GetMessageA(message, nil, 0, 0) > 0
+{
+    user32.TranslateMessage(message)
+    user32.DispatchMessageA(message)
+}
